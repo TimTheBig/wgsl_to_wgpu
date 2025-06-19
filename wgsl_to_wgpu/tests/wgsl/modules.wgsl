@@ -8,7 +8,17 @@ struct uniforms_Uniforms2 {
 }
 
 struct uniforms_nested_Nested {
-    a: vec4<f32>
+    a: vec4<f32>,
+    b: Root,
+    c: shared_Shared
+}
+
+struct Root {
+    c: vec4<f32>
+}
+
+struct shared_Shared {
+    d: vec4<f32>
 }
 
 struct shared_VertexInput {
