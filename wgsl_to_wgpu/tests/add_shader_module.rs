@@ -1,5 +1,5 @@
 use pretty_assertions::assert_eq;
-use wgsl_to_wgpu::{Module, TypePath};
+use wgsl_to_wgpu::{Module, ModulePath, TypePath};
 
 fn demangle_underscore(name: &str) -> TypePath {
     // Preprocessors that support modules mangle absolute paths.
@@ -9,7 +9,9 @@ fn demangle_underscore(name: &str) -> TypePath {
     let components: Vec<_> = name.split("_").collect();
     let (name, parents) = components.split_last().unwrap();
     TypePath {
-        parents: parents.into_iter().map(|p| p.to_string()).collect(),
+        parent: ModulePath {
+            components: parents.into_iter().map(|p| p.to_string()).collect(),
+        },
         name: name.to_string(),
     }
 }
@@ -25,10 +27,7 @@ fn single_module() {
         include_str!("wgsl/modules.wgsl"),
         None,
         options,
-        TypePath {
-            parents: Vec::new(),
-            name: String::new(),
-        },
+        ModulePath::default(),
         demangle_underscore,
     )
     .unwrap();

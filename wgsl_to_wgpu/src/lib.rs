@@ -268,10 +268,7 @@ pub fn create_shader_module(
         wgsl_source,
         Some(wgsl_include_path),
         options,
-        TypePath {
-            parents: Vec::new(),
-            name: String::new(),
-        },
+        ModulePath::default(),
         demangle_identity,
     )?;
     Ok(root.to_generated_bindings(options))
@@ -322,10 +319,7 @@ pub fn create_shader_module_embedded(
         wgsl_source,
         None,
         options,
-        TypePath {
-            parents: Vec::new(),
-            name: String::new(),
-        },
+        ModulePath::default(),
         demangle_identity,
     )?;
 
@@ -334,18 +328,27 @@ pub fn create_shader_module_embedded(
 }
 
 /// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
+///
+/// Use [ModulePath::default] for a root module with no components.
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
+pub struct ModulePath {
+    /// The path components like `["a", "b"]` in `a::b`.
+    /// The root module has no components.
+    pub components: Vec<String>,
+}
+
+/// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
-    /// The root module should have no parents.
-    pub parents: Vec<String>,
+    pub parent: ModulePath,
     /// The name of the item like "Item" for `a::b::Item`.
     pub name: String,
 }
 
 fn demangle_identity(name: &str) -> TypePath {
     TypePath {
-        parents: Vec::new(),
+        parent: ModulePath::default(),
         name: name.to_string(),
     }
 }
@@ -365,24 +368,16 @@ where
 {
     // TODO: how to handle multiple generated shaders sharing modules?
     let mut root = Module::default();
-    root.add_shader_module(
-        wgsl_source,
-        None,
-        options,
-        TypePath {
-            parents: Vec::new(),
-            name: String::new(),
-        },
-        demangle,
-    )?;
+    root.add_shader_module(wgsl_source, None, options, ModulePath::default(), demangle)?;
 
     let output = root.to_generated_bindings(options);
     Ok(output)
 }
 
+/// Generated code for a Rust module and its submodules.
 #[derive(Debug, Default)]
 pub struct Module {
-    items: BTreeMap<TypePath, TokenStream>,
+    items: BTreeMap<String, TokenStream>,
     submodules: BTreeMap<String, Module>,
 }
 
@@ -408,6 +403,7 @@ impl Module {
         tokens
     }
 
+    /// Generate Rust code for this module and all of its submodules recursively.
     pub fn to_generated_bindings(&self, options: WriteOptions) -> String {
         let output = self.to_tokens();
         if options.rustfmt {
@@ -419,8 +415,8 @@ impl Module {
 
     fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)]) {
         for (item, tokens) in structs {
-            let module = self.get_module(&item.parents);
-            module.items.insert(item.clone(), tokens.clone());
+            let module = self.get_module(&item.parent.components);
+            module.items.insert(item.name.clone(), tokens.clone());
         }
     }
 
@@ -440,7 +436,7 @@ impl Module {
         wgsl_source: &str,
         wgsl_include_path: Option<&str>,
         options: WriteOptions,
-        root_path: TypePath,
+        root_path: ModulePath,
         demangle: F,
     ) -> Result<(), CreateModuleError>
     where
@@ -524,7 +520,10 @@ impl Module {
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
-            root_path,
+            TypePath {
+                parent: root_path,
+                name: String::new(),
+            },
             quote! {
                 #override_constants
                 #bind_groups_module

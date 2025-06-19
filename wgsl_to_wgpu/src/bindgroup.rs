@@ -520,7 +520,7 @@ where
 
             // The same binding name can be used in multiple modules.
             // Convert the full path to avoid struct fields with the same name.
-            let mut components = path.parents;
+            let mut components = path.parent.components;
             components.push(path.name);
             let name = components.join("_");
 

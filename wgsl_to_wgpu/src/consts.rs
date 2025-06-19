@@ -2,7 +2,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{wgsl::rust_type, MatrixVectorTypes, TypePath};
+use crate::{wgsl::rust_type, MatrixVectorTypes, ModulePath, TypePath};
 
 pub fn consts<F>(module: &naga::Module, demangle: F) -> Vec<(TypePath, TokenStream)>
 where
@@ -54,7 +54,7 @@ where
             // TODO: Do we only need to handle scalar types here?
             let ty = rust_type(
                 &TypePath {
-                    parents: Vec::new(),
+                    parent: ModulePath::default(),
                     name: String::new(),
                 },
                 module,

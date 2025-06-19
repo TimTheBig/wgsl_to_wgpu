@@ -207,8 +207,8 @@ where
 }
 
 fn relative_type_path(base: &TypePath, target: TypePath) -> String {
-    let base_path: PathBuf = base.parents.iter().collect();
-    let target_path: PathBuf = target.parents.iter().collect();
+    let base_path: PathBuf = base.parent.components.iter().collect();
+    let target_path: PathBuf = target.parent.components.iter().collect();
     let relative_path = pathdiff::diff_paths(target_path, base_path).unwrap();
 
     // TODO: Implement this from scratch with tests?

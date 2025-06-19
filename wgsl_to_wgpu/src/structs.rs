@@ -279,7 +279,7 @@ fn struct_has_rts_array_member(members: &[naga::StructMember], module: &naga::Mo
 mod tests {
     use super::*;
 
-    use crate::{assert_tokens_eq, MatrixVectorTypes, WriteOptions};
+    use crate::{assert_tokens_eq, MatrixVectorTypes, ModulePath, WriteOptions};
     use indoc::indoc;
 
     fn test_structs(wgsl: &str, rust: &str, options: WriteOptions) {
@@ -290,7 +290,7 @@ mod tests {
 
     fn struct_tokens(module: &naga::Module, options: WriteOptions) -> TokenStream {
         let structs = structs(&module, options, |s| TypePath {
-            parents: Vec::new(),
+            parent: ModulePath::default(),
             name: s.to_string(),
         });
         let structs = structs.iter().map(|(_, s)| s);
