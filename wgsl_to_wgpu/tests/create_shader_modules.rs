@@ -18,6 +18,20 @@ fn demangle_underscore(name: &str) -> TypePath {
 
 #[test]
 fn single_root_module() {
+    let output = wgsl_to_wgpu::create_shader_modules(
+        include_str!("wgsl/modules.wgsl"),
+        wgsl_to_wgpu::WriteOptions {
+            rustfmt: true,
+            ..Default::default()
+        },
+        demangle_underscore,
+    )
+    .unwrap();
+    assert_eq!(include_str!("output/modules_single.rs"), output);
+}
+
+#[test]
+fn add_single_root_module() {
     let mut root = Module::default();
     let options = wgsl_to_wgpu::WriteOptions {
         rustfmt: true,
@@ -37,7 +51,7 @@ fn single_root_module() {
 }
 
 #[test]
-fn duplicate_module_different_paths() {
+fn add_duplicate_module_different_paths() {
     // Test shared types and handling of duplicate names.
     let mut root = Module::default();
     let options = wgsl_to_wgpu::WriteOptions {

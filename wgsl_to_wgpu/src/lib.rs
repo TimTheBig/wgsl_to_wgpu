@@ -2,7 +2,7 @@
 //! wgsl_to_wgpu is a library for generating typesafe Rust bindings from WGSL shaders to [wgpu](https://github.com/gfx-rs/wgpu).
 //!
 //! ## Getting Started
-//! The [create_shader_module] function is intended for use in build scripts.
+//! The [create_shader_module] and [create_shader_modules] functions are intended for use in build scripts.
 //! This facilitates a shader focused workflow where edits to WGSL code are automatically reflected in the corresponding Rust file.
 //! For example, changing the type of a uniform in WGSL will raise a compile error in Rust code using the generated struct to initialize the buffer.
 //!
@@ -29,7 +29,14 @@
 //!     std::fs::write("src/shader.rs", text.as_bytes()).unwrap();
 //! }
 //! ```
-
+//!
+//! ## Modules and Preprocessors
+//! There are a number of useful processing crates that extend or modify WGSL
+//! to add features like module imports or preprocessor defines.
+//! wgsl_to_wgpu does not provide support for any of these crates directly.
+//! Instead, pass the final processed WGSL to [create_shader_modules]
+//! and specify the approriate name demangling logic if needed.
+//! See the function documentation for details.
 #![allow(clippy::result_large_err)]
 
 extern crate wgpu_types as wgpu;
@@ -221,7 +228,7 @@ impl Default for MatrixVectorTypes {
     }
 }
 
-/// Generates a Rust module for a WGSL shader included via [include_str].
+/// Create a Rust module for a WGSL shader included via [include_str].
 ///
 /// The `wgsl_include_path` should be a valid input to [include_str] in the generated file's location.
 /// The included contents should be identical to `wgsl_source`.
@@ -274,8 +281,16 @@ pub fn create_shader_module(
     Ok(root.to_generated_bindings(options))
 }
 
-// TODO: Show how to convert a naga module back to wgsl.
-/// Generates a Rust module for a WGSL shader embedded as a string literal.
+/// Create Rust module(s) for a WGSL shader included as a string literal.
+///
+/// The `demangle` function converts mangled absolute module paths to module path components.
+/// Name mangling is necessary to uniquely identify items in WGSL code and convert special syntax to valid WGSL.
+///
+/// Use [demangle_identity] when not using a preprocessing library that supports module imports.
+/// This will place all generated code in the root module.
+///
+/// Some crates provide their own "demangle" or "undecorate" function as part of the public API.
+/// In some cases, this will need to be implemented manually based on the implementation details of the mangling fuction.
 ///
 /// # Examples
 /// This function is intended to be called at build time such as in a build script.
@@ -285,7 +300,9 @@ pub fn create_shader_module(
 ```rust no_run
 // build.rs
 # fn generate_wgsl_source_string() -> String { String::new() }
-fn main() -> Result<(), Box<dyn std::error::Error>>{
+use wgsl_to_wgpu::{create_shader_modules, demangle_identity};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate the shader at build time.
     let wgsl_source = generate_wgsl_source_string();
 
@@ -301,7 +318,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     };
 
     // Generate the bindings.
-    let text = wgsl_to_wgpu::create_shader_module_embedded(&wgsl_source, options)
+    let text = create_shader_modules(&wgsl_source, options, demangle_identity)
         .inspect_err(|error| error.emit_to_stderr(&wgsl_source))
         // Don't print out same error twice
         .map_err(|_| "Failed to validate shader")?;
@@ -310,24 +327,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
 }
 ```
  */
-pub fn create_shader_module_embedded(
+pub fn create_shader_modules<F>(
     wgsl_source: &str,
     options: WriteOptions,
-) -> Result<String, CreateModuleError> {
+    demangle: F,
+) -> Result<String, CreateModuleError>
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    // TODO: Make demangle optional?
+    // TODO: move demangle to write options?
     let mut root = Module::default();
-    root.add_shader_module(
-        wgsl_source,
-        None,
-        options,
-        ModulePath::default(),
-        demangle_identity,
-    )?;
+    root.add_shader_module(wgsl_source, None, options, ModulePath::default(), demangle)?;
 
     let output = root.to_generated_bindings(options);
     Ok(output)
 }
-
-/// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
+/// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `Item`.
 ///
 /// Use [ModulePath::default] for a root module with no components.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
@@ -337,7 +353,7 @@ pub struct ModulePath {
     pub components: Vec<String>,
 }
 
-/// A full qualified path like `a::b::Item` split into `["a", "b"]` and `Item`.
+/// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `Item`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
@@ -346,32 +362,12 @@ pub struct TypePath {
     pub name: String,
 }
 
-fn demangle_identity(name: &str) -> TypePath {
+/// An identity demangling function that treats `name` as an item in the root module.
+pub fn demangle_identity(name: &str) -> TypePath {
     TypePath {
         parent: ModulePath::default(),
         name: name.to_string(),
     }
-}
-
-/// Generates Rust modules for a WGSL shader embedded as a string literal
-/// with modules determined by `demangle`.
-///
-/// # Examples
-// TODO: examples
-pub fn create_shader_modules<F>(
-    wgsl_source: &str,
-    options: WriteOptions,
-    demangle: F,
-) -> Result<String, CreateModuleError>
-where
-    F: Fn(&str) -> TypePath + Clone,
-{
-    // TODO: how to handle multiple generated shaders sharing modules?
-    let mut root = Module::default();
-    root.add_shader_module(wgsl_source, None, options, ModulePath::default(), demangle)?;
-
-    let output = root.to_generated_bindings(options);
-    Ok(output)
 }
 
 /// Generated code for a Rust module and its submodules.
@@ -794,21 +790,23 @@ mod test {
     }
 
     #[test]
-    fn create_shader_module_embed_source() {
+    fn create_shader_modules_source() {
         let source = include_str!("data/fragment_simple.wgsl");
-        let actual = create_shader_module_embedded(source, WriteOptions::default()).unwrap();
+        let actual =
+            create_shader_modules(source, WriteOptions::default(), demangle_identity).unwrap();
         assert_eq!(include_str!("data/fragment_simple.rs"), actual);
     }
 
     #[test]
-    fn create_shader_module_embed_source_rustfmt() {
+    fn create_shader_modules_source_rustfmt() {
         let source = include_str!("data/fragment_simple.wgsl");
-        let actual = create_shader_module_embedded(
+        let actual = create_shader_modules(
             source,
             WriteOptions {
                 rustfmt: true,
                 ..Default::default()
             },
+            demangle_identity,
         )
         .unwrap();
         assert_eq!(include_str!("data/fragment_simple_rustfmt.rs"), actual);
