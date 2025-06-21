@@ -283,14 +283,8 @@ pub fn create_shader_module(
 
 /// Create Rust module(s) for a WGSL shader included as a string literal.
 ///
-/// The `demangle` function converts mangled absolute module paths to module path components.
-/// Name mangling is necessary to uniquely identify items in WGSL code and convert special syntax to valid WGSL.
-///
-/// Use [demangle_identity] when not using a preprocessing library that supports module imports.
-/// This will place all generated code in the root module.
-///
-/// Some crates provide their own "demangle" or "undecorate" function as part of the public API.
-/// In some cases, this will need to be implemented manually based on the implementation details of the mangling fuction.
+/// This creates a [Module] internally and adds a single WGSL shader.
+/// See [Module::add_shader_module] for details.
 ///
 /// # Examples
 /// This function is intended to be called at build time such as in a build script.
@@ -300,7 +294,8 @@ pub fn create_shader_module(
 ```rust no_run
 // build.rs
 # fn generate_wgsl_source_string() -> String { String::new() }
-use wgsl_to_wgpu::{create_shader_modules, demangle_identity};
+# fn demangle(name: &str) -> wgsl_to_wgpu::TypePath { wgsl_to_wgpu::demangle_identity(name) }
+use wgsl_to_wgpu::{create_shader_modules};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate the shader at build time.
@@ -318,7 +313,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Generate the bindings.
-    let text = create_shader_modules(&wgsl_source, options, demangle_identity)
+    let text = create_shader_modules(&wgsl_source, options, demangle)
         .inspect_err(|error| error.emit_to_stderr(&wgsl_source))
         // Don't print out same error twice
         .map_err(|_| "Failed to validate shader")?;
@@ -335,8 +330,6 @@ pub fn create_shader_modules<F>(
 where
     F: Fn(&str) -> TypePath + Clone,
 {
-    // TODO: Make demangle optional?
-    // TODO: move demangle to write options?
     let mut root = Module::default();
     root.add_shader_module(wgsl_source, None, options, ModulePath::default(), demangle)?;
 
@@ -345,7 +338,8 @@ where
 }
 /// A fully qualified absolute path like `a::b::Item` split into `["a", "b"]` and `Item`.
 ///
-/// Use [ModulePath::default] for a root module with no components.
+/// This path will be relative to the generated root module.
+/// Use [ModulePath::default] to refer to the root module itself.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct ModulePath {
     /// The path components like `["a", "b"]` in `a::b`.
@@ -358,7 +352,7 @@ pub struct ModulePath {
 pub struct TypePath {
     /// The parent components like `["a", "b"]` in `a::b::Item`.
     pub parent: ModulePath,
-    /// The name of the item like "Item" for `a::b::Item`.
+    /// The name of the item like `"Item"` for `a::b::Item`.
     pub name: String,
 }
 
@@ -399,7 +393,7 @@ impl Module {
         tokens
     }
 
-    /// Generate Rust code for this module and all of its submodules recursively.
+    /// Generate a combined Rust module for this module and all of its submodules recursively.
     pub fn to_generated_bindings(&self, options: WriteOptions) -> String {
         let output = self.to_tokens();
         if options.rustfmt {
@@ -427,6 +421,62 @@ impl Module {
         }
     }
 
+    /// Add generated Rust code for a WGSL shader located at `root_path`.
+    ///
+    /// This should only be called for files with shader entry points.
+    /// Imported shader files should be handled by the preprocessing library and included in `wgsl_source`.
+    ///
+    /// # Name Demangling
+    /// Name mangling is necessary in some cases to uniquely identify items and ensure valid WGSL names.
+    /// The `demangle` function converts mangled absolute module paths to module path components.
+    ///
+    /// Use [demangle_identity] if the names do not need to be demangled.
+    /// This demangle function will place all generated code in the root module.
+    ///
+    /// The demangling logic should reverse the operations performed by the mangling fuction.
+    /// Some crates provide their own "demangle" or "undecorate" function as part of the public API.
+    ///
+    /// The demangle function used for wgsl_to_wgpu should demangle names into absolute module paths
+    /// and split this absolute path into a parent [ModulePath] and item name.
+    ///
+    /// The [TypePath] uniquely identifies a generated item like a struct or constant.
+    /// No guarantees are made about which item will be kept when generating multiple items
+    /// with the same [TypePath].
+    ///
+    /// # Examples
+    /**
+    ```rust no_run
+    // build.rs
+    # fn generate_wgsl_source_string(_: &str) -> String { String::new() }
+    # fn demangle(name: &str) -> wgsl_to_wgpu::TypePath { wgsl_to_wgpu::demangle_identity(name) }
+    use wgsl_to_wgpu::{create_shader_modules, demangle_identity, Module, ModulePath};
+
+    fn main() -> Result<(), Box<dyn std::error::Error>> {
+        // Configure the output based on the dependencies for the project.
+        let options = wgsl_to_wgpu::WriteOptions::default();
+
+        // Start with an empty root module.
+        let mut root = Module::default();
+
+        // Add a shader directly to the root module.
+        let wgsl_source1 = generate_wgsl_source_string("src/root.wgsl");
+        root.add_shader_module(&wgsl_source1, None, options, ModulePath::default(), demangle)?;
+
+        // Add a shader in the "shader2" module.
+        let wgsl_source2 = generate_wgsl_source_string("src/shader2.wgsl");
+        let path2 = ModulePath {
+            components: vec!["shader2".to_string()],
+        };
+        root.add_shader_module(&wgsl_source1, None, options, path2, demangle)?;
+
+        // Generate modules for "shader1", "shader2", and any imported modules determined by the demangle function.
+        let text = root.to_generated_bindings(options);
+
+        std::fs::write("src/shaders.rs", text.as_bytes())?;
+        Ok(())
+    }
+    ```
+     */
     pub fn add_shader_module<F>(
         &mut self,
         wgsl_source: &str,
