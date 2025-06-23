@@ -3,7 +3,7 @@
 pub struct Root {
     pub c: [f32; 4],
 }
-mod shader1 {
+pub mod shader1 {
     pub mod bind_groups {
         #[derive(Debug)]
         pub struct BindGroup0(wgpu::BindGroup);
@@ -171,8 +171,8 @@ mod shader1 {
         })
     }
 }
-mod shaders {
-    mod shader2 {
+pub mod shaders {
+    pub mod shader2 {
         pub mod bind_groups {
             #[derive(Debug)]
             pub struct BindGroup0(wgpu::BindGroup);
@@ -341,7 +341,7 @@ mod shaders {
         }
     }
 }
-mod shared {
+pub mod shared {
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Shared {
@@ -370,14 +370,14 @@ mod shared {
         }
     }
 }
-mod uniforms {
+pub mod uniforms {
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Uniforms {
         pub a: [f32; 4],
         pub b: nested::Nested,
     }
-    mod nested {
+    pub mod nested {
         #[repr(C)]
         #[derive(Debug, Copy, Clone, PartialEq)]
         pub struct Nested {

@@ -168,7 +168,7 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
 pub struct Root {
     pub c: [f32; 4],
 }
-mod shared {
+pub mod shared {
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Shared {
@@ -197,14 +197,14 @@ mod shared {
         }
     }
 }
-mod uniforms {
+pub mod uniforms {
     #[repr(C)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Uniforms {
         pub a: [f32; 4],
         pub b: nested::Nested,
     }
-    mod nested {
+    pub mod nested {
         #[repr(C)]
         #[derive(Debug, Copy, Clone, PartialEq)]
         pub struct Nested {

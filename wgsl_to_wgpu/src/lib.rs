@@ -384,7 +384,7 @@ impl Module {
             let name = Ident::new(name, Span::call_site());
             tokens = quote! {
                 #tokens
-                mod #name {
+                pub mod #name {
                     #submodule
                 }
             }
