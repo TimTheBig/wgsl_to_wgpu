@@ -1,15 +1,10 @@
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Root {
-    pub c: [f32; 4],
-}
 pub mod shader1 {
     pub mod bind_groups {
         #[derive(Debug)]
         pub struct BindGroup0(wgpu::BindGroup);
         #[derive(Debug)]
         pub struct BindGroupLayout0<'a> {
-            pub bindings_uniforms: wgpu::BufferBinding<'a>,
+            pub uniforms: wgpu::BufferBinding<'a>,
         }
         const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor =
             wgpu::BindGroupLayoutDescriptor {
@@ -35,7 +30,7 @@ pub mod shader1 {
                     layout: &bind_group_layout,
                     entries: &[wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(bindings.bindings_uniforms),
+                        resource: wgpu::BindingResource::Buffer(bindings.uniforms),
                     }],
                     label: Some("BindGroup0"),
                 });
@@ -99,8 +94,8 @@ pub mod shader1 {
     ) {
         bind_group0.set(pass);
     }
-    pub const ENTRY_MAIN: &str = "main";
-    pub const ENTRY_FS_MAIN: &str = "fs_main";
+    pub const ENTRY_VERT: &str = "vert";
+    pub const ENTRY_FRAG: &str = "frag";
     #[derive(Debug)]
     pub struct VertexEntry<const N: usize> {
         pub entry_point: &'static str,
@@ -121,9 +116,9 @@ pub mod shader1 {
             },
         }
     }
-    pub fn main_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
+    pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
         VertexEntry {
-            entry_point: ENTRY_MAIN,
+            entry_point: ENTRY_VERT,
             buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
             constants: Default::default(),
         }
@@ -148,14 +143,14 @@ pub mod shader1 {
             },
         }
     }
-    pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
+    pub fn frag_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
         FragmentEntry {
-            entry_point: ENTRY_FS_MAIN,
+            entry_point: ENTRY_FRAG,
             targets,
             constants: Default::default(),
         }
     }
-    pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn main(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn fs_main(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
+    pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
     pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
         let source = std::borrow::Cow::Borrowed(SOURCE);
         device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -170,6 +165,11 @@ pub mod shader1 {
             push_constant_ranges: &[],
         })
     }
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone, PartialEq)]
+    pub struct Root {
+        pub c: [f32; 4],
+    }
 }
 pub mod shaders {
     pub mod shader2 {
@@ -178,7 +178,7 @@ pub mod shaders {
             pub struct BindGroup0(wgpu::BindGroup);
             #[derive(Debug)]
             pub struct BindGroupLayout0<'a> {
-                pub bindings_uniforms: wgpu::BufferBinding<'a>,
+                pub uniforms: wgpu::BufferBinding<'a>,
             }
             const LAYOUT_DESCRIPTOR0: wgpu::BindGroupLayoutDescriptor =
                 wgpu::BindGroupLayoutDescriptor {
@@ -204,7 +204,7 @@ pub mod shaders {
                         layout: &bind_group_layout,
                         entries: &[wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::Buffer(bindings.bindings_uniforms),
+                            resource: wgpu::BindingResource::Buffer(bindings.uniforms),
                         }],
                         label: Some("BindGroup0"),
                     });
@@ -268,8 +268,8 @@ pub mod shaders {
         ) {
             bind_group0.set(pass);
         }
-        pub const ENTRY_MAIN: &str = "main";
-        pub const ENTRY_FS_MAIN: &str = "fs_main";
+        pub const ENTRY_VERT: &str = "vert";
+        pub const ENTRY_FRAG: &str = "frag";
         #[derive(Debug)]
         pub struct VertexEntry<const N: usize> {
             pub entry_point: &'static str,
@@ -290,9 +290,9 @@ pub mod shaders {
                 },
             }
         }
-        pub fn main_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
+        pub fn vert_entry(vertex_input: wgpu::VertexStepMode) -> VertexEntry<1> {
             VertexEntry {
-                entry_point: ENTRY_MAIN,
+                entry_point: ENTRY_VERT,
                 buffers: [VertexInput::vertex_buffer_layout(vertex_input)],
                 constants: Default::default(),
             }
@@ -317,14 +317,14 @@ pub mod shaders {
                 },
             }
         }
-        pub fn fs_main_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
+        pub fn frag_entry(targets: [Option<wgpu::ColorTargetState>; 1]) -> FragmentEntry<1> {
             FragmentEntry {
-                entry_point: ENTRY_FS_MAIN,
+                entry_point: ENTRY_FRAG,
                 targets,
                 constants: Default::default(),
             }
         }
-        pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn main(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn fs_main(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
+        pub const SOURCE : & str = "struct uniforms_Uniforms {\n    a: vec4<f32>,\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_Uniforms2 {\n    b: uniforms_nested_Nested,\n}\n\nstruct uniforms_nested_Nested {\n    a: vec4<f32>,\n    b: Root,\n    c: shared_Shared\n}\n\nstruct Root {\n    c: vec4<f32>\n}\n\nstruct shared_Shared {\n    d: vec4<f32>\n}\n\nstruct shared_VertexInput {\n    @location(0) position: vec3<f32>\n}\n\nstruct shared_VertexOutput {\n    @builtin(position) clip_position: vec4<f32>,\n};\n\nconst shared_TEST: f32 = 1.0;\n\n@group(0) @binding(0)\nvar<uniform> bindings_uniforms: uniforms_Uniforms;\n\n@vertex\nfn vert(in: shared_VertexInput) -> shared_VertexOutput {\n    var out: shared_VertexOutput;\n    out.clip_position = vec4(in.position, shared_TEST);\n    return out;\n}\n\n@fragment\nfn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {\n    return bindings_uniforms.b.a * vec4(0.0);\n}" ;
         pub fn create_shader_module(device: &wgpu::Device) -> wgpu::ShaderModule {
             let source = std::borrow::Cow::Borrowed(SOURCE);
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -338,6 +338,11 @@ pub mod shaders {
                 bind_group_layouts: &[&bind_groups::BindGroup0::get_bind_group_layout(device)],
                 push_constant_ranges: &[],
             })
+        }
+        #[repr(C)]
+        #[derive(Debug, Copy, Clone, PartialEq)]
+        pub struct Root {
+            pub c: [f32; 4],
         }
     }
 }

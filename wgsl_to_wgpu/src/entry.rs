@@ -34,16 +34,20 @@ pub fn fragment_target_count(module: &Module, f: &Function) -> usize {
     }
 }
 
-pub fn entry_point_constants(module: &naga::Module) -> TokenStream {
+pub fn entry_point_constants<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let entry_points: Vec<TokenStream> = module
         .entry_points
         .iter()
         .map(|entry_point| {
+            // The entry name string itself should remain mangled to match the WGSL code.
             let entry_name = Literal::string(&entry_point.name);
-            let const_name = Ident::new(
-                &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                Span::call_site(),
-            );
+
+            let name = &demangle(&entry_point.name).name;
+            let const_name =
+                Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
             quote! {
                 pub const #const_name: &str = #entry_name;
             }
@@ -64,12 +68,11 @@ where
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Vertex => {
-                let fn_name =
-                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
-                let const_name = Ident::new(
-                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                    Span::call_site(),
-                );
+                let name = &demangle(&entry_point.name).name;
+
+                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+                let const_name =
+                    Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
 
                 let vertex_inputs = vertex_entry_structs(entry_point, module, demangle.clone());
                 let mut step_mode_params = vec![];
@@ -212,19 +215,21 @@ where
     }).collect()
 }
 
-pub fn fragment_states(module: &naga::Module) -> TokenStream {
+pub fn fragment_states<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let entries: Vec<TokenStream> = module
         .entry_points
         .iter()
         .filter_map(|entry_point| match &entry_point.stage {
             ShaderStage::Fragment => {
-                let fn_name =
-                    Ident::new(&format!("{}_entry", &entry_point.name), Span::call_site());
+                let name = &demangle(&entry_point.name).name;
 
-                let const_name = Ident::new(
-                    &format!("ENTRY_{}", &entry_point.name.to_uppercase()),
-                    Span::call_site(),
-                );
+                let fn_name = Ident::new(&format!("{}_entry", name), Span::call_site());
+
+                let const_name =
+                    Ident::new(&format!("ENTRY_{}", name.to_uppercase()), Span::call_site());
 
                 let target_count =
                     Literal::usize_unsuffixed(fragment_target_count(module, &entry_point.function));
@@ -337,7 +342,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = fragment_states(&module);
+        let actual = fragment_states(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {
@@ -413,7 +418,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = fragment_states(&module);
+        let actual = fragment_states(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {

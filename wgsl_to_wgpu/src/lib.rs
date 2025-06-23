@@ -403,9 +403,15 @@ impl Module {
         }
     }
 
-    fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)]) {
+    fn add_module_items(&mut self, structs: &[(TypePath, TokenStream)], root_path: &ModulePath) {
         for (item, tokens) in structs {
-            let module = self.get_module(&item.parent.components);
+            // Replace a "root" path with the specified root module.
+            let components = if item.parent.components.is_empty() {
+                &root_path.components
+            } else {
+                &item.parent.components
+            };
+            let module = self.get_module(components);
             module.items.insert(item.name.clone(), tokens.clone());
         }
     }
@@ -425,6 +431,10 @@ impl Module {
     ///
     /// This should only be called for files with shader entry points.
     /// Imported shader files should be handled by the preprocessing library and included in `wgsl_source`.
+    ///
+    /// The `wgsl_include_path` should usually be `None` to include the `wgsl_source` as a string literal.
+    /// If `Some`, the `wgsl_include_path` should be a valid input to [include_str] in the generated file's location
+    /// with included contents identical to `wgsl_source`.
     ///
     /// # Name Demangling
     /// Name mangling is necessary in some cases to uniquely identify items and ensure valid WGSL names.
@@ -497,20 +507,20 @@ impl Module {
                 .map_err(|error| CreateModuleError::ValidationError { error })?;
         }
 
-        let bind_group_data = get_bind_group_data(&module, demangle.clone())?;
-
         let global_stages = wgsl::global_shader_stages(&module);
+        let bind_group_data = get_bind_group_data(&module, &global_stages, demangle.clone())?;
+
         let entry_stages = wgsl::entry_stages(&module);
 
         // Collect tokens for each item.
         let structs = structs::structs(&module, options, demangle.clone());
         let consts = consts::consts(&module, demangle.clone());
-        let bind_groups_module = bind_groups_module(&module, &bind_group_data, &global_stages);
+        let bind_groups_module = bind_groups_module(&module, &bind_group_data);
         let vertex_methods = vertex_struct_methods(&module, demangle.clone());
-        let compute_module = compute_module(&module);
-        let entry_point_constants = entry_point_constants(&module);
+        let compute_module = compute_module(&module, demangle.clone());
+        let entry_point_constants = entry_point_constants(&module, demangle.clone());
         let vertex_states = vertex_states(&module, demangle.clone());
-        let fragment_states = fragment_states(&module);
+        let fragment_states = fragment_states(&module, demangle.clone());
 
         // Use a string literal if no include path is provided.
         let included_source = wgsl_include_path
@@ -560,14 +570,14 @@ impl Module {
         });
 
         // Place items into appropriate modules.
-        self.add_module_items(&consts);
-        self.add_module_items(&structs);
-        self.add_module_items(&vertex_methods);
+        self.add_module_items(&consts, &root_path);
+        self.add_module_items(&structs, &root_path);
+        self.add_module_items(&vertex_methods, &root_path);
 
         // Place items generated for this module in the root module.
         let root_items = vec![(
             TypePath {
-                parent: root_path,
+                parent: root_path.clone(),
                 name: String::new(),
             },
             quote! {
@@ -582,7 +592,7 @@ impl Module {
                 #create_pipeline_layout
             },
         )];
-        self.add_module_items(&root_items);
+        self.add_module_items(&root_items, &root_path);
 
         Ok(())
     }
@@ -656,14 +666,17 @@ fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
     Ident::new(&format!("{name}{index}"), Span::call_site())
 }
 
-fn compute_module(module: &naga::Module) -> TokenStream {
+fn compute_module<F>(module: &naga::Module, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
     let entry_points: Vec<_> = module
         .entry_points
         .iter()
         .filter_map(|e| {
             if e.stage == naga::ShaderStage::Compute {
-                let workgroup_size_constant = workgroup_size(e);
-                let create_pipeline = create_compute_pipeline(e);
+                let workgroup_size_constant = workgroup_size(e, demangle.clone());
+                let create_pipeline = create_compute_pipeline(e, demangle.clone());
 
                 Some(quote! {
                     #workgroup_size_constant
@@ -687,12 +700,20 @@ fn compute_module(module: &naga::Module) -> TokenStream {
     }
 }
 
-fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
+fn create_compute_pipeline<F>(e: &naga::EntryPoint, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath,
+{
+    let name = &demangle(&e.name).name;
+
     // Compute pipeline creation has few parameters and can be generated.
-    let pipeline_name = Ident::new(&format!("create_{}_pipeline", e.name), Span::call_site());
+    let pipeline_name = Ident::new(&format!("create_{}_pipeline", name), Span::call_site());
+
+    // The entry name string itself should remain mangled to match the WGSL code.
     let entry_point = &e.name;
+
     // TODO: Include a user supplied module name in the label?
-    let label = format!("Compute Pipeline {}", e.name);
+    let label = format!("Compute Pipeline {}", name);
     quote! {
         pub fn #pipeline_name(device: &wgpu::Device) -> wgpu::ComputePipeline {
             let module = super::create_shader_module(device);
@@ -709,9 +730,14 @@ fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
     }
 }
 
-fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
+fn workgroup_size<F>(e: &naga::EntryPoint, demangle: F) -> TokenStream
+where
+    F: Fn(&str) -> TypePath + Clone,
+{
+    let name = &demangle(&e.name).name;
+
     let name = Ident::new(
-        &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
+        &format!("{}_WORKGROUP_SIZE", name.to_uppercase()),
         Span::call_site(),
     );
     let [x, y, z] = e
@@ -923,7 +949,7 @@ mod test {
 
     fn items_to_tokens(items: Vec<(TypePath, TokenStream)>) -> TokenStream {
         let mut root = Module::default();
-        root.add_module_items(&items);
+        root.add_module_items(&items, &ModulePath::default());
         root.to_tokens()
     }
 
@@ -1230,7 +1256,7 @@ mod test {
         "#};
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = compute_module(&module);
+        let actual = compute_module(&module, demangle_identity);
 
         assert_tokens_eq!(quote!(), actual);
     }
@@ -1249,7 +1275,7 @@ mod test {
         };
 
         let module = naga::front::wgsl::parse_str(source).unwrap();
-        let actual = compute_module(&module);
+        let actual = compute_module(&module, demangle_identity);
 
         assert_tokens_eq!(
             quote! {

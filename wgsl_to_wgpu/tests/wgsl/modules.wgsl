@@ -35,13 +35,13 @@ const shared_TEST: f32 = 1.0;
 var<uniform> bindings_uniforms: uniforms_Uniforms;
 
 @vertex
-fn main(in: shared_VertexInput) -> shared_VertexOutput {
+fn vert(in: shared_VertexInput) -> shared_VertexOutput {
     var out: shared_VertexOutput;
     out.clip_position = vec4(in.position, shared_TEST);
     return out;
 }
 
 @fragment
-fn fs_main(in: shared_VertexOutput) -> @location(0) vec4<f32> {
+fn frag(in: shared_VertexOutput) -> @location(0) vec4<f32> {
     return bindings_uniforms.b.a * vec4(0.0);
 }
