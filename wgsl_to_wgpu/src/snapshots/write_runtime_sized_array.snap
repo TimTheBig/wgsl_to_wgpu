@@ -156,6 +156,6 @@ pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
 #[derive(Debug, Clone, PartialEq, encase::ShaderType)]
 pub struct RtsStruct {
     pub other_data: i32,
-    #[size(runtime)]
+    #[shader(size(runtime))]
     pub the_array: Vec<u32>,
 }
